@@ -5,7 +5,13 @@ from urllib.request import urlopen
 
 import pytest
 
-BASE_URL = "http://localhost:5000"
+# NOTE:
+# For automated tests against the Flask development server, 127.0.0.1 is used
+# instead of 'localhost' to avoid 403 responses caused by host validation when
+# requests are performed via urllib instead of a browser.
+BASE_URL = "http://127.0.0.1:5000"
+
+# WireMock does not apply the same host validation, so 'localhost' is safe here
 BASE_URL_MOCK = "http://localhost:9090"
 DEFAULT_TIMEOUT = 2  # in secs
 
