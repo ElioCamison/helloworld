@@ -1,0 +1,142 @@
+pipeline {
+  agent none
+
+  options {
+    timestamps()
+  }
+
+  environment {
+    PYTHON     = "/opt/homebrew/bin/python3.11"
+    FLASK_APP = "app/api.py"
+  }
+
+  stages {
+
+    stage('Get Code') {
+      agent { label 'principal' }
+      steps {
+        git branch: 'master',
+            url: 'https://github.com/ElioCamison/helloworld.git'
+
+        stash name: 'source', includes: '**/*'
+      }
+    }
+
+    stage('Tests') {
+      parallel {
+
+        stage('Unit') {
+          agent { label 'agent-test' }
+          steps {
+            unstash 'source'
+            sh '''
+              python3.11 -m venv .venv
+              source .venv/bin/activate
+              pip install -r requirements.txt
+              export PYTHONPATH=$WORKSPACE
+
+              python -m coverage run --source=app -m pytest --junitxml=result-unit.xml test/unit
+            '''
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'result-unit.xml'
+            }
+          }
+        }
+
+        stage('Rest') {
+          agent { label 'agent-test' }
+          steps {
+            unstash 'source'
+            sh '''
+              python3.11 -m venv .venv
+              source .venv/bin/activate
+              pip install -r requirements.txt
+              export PYTHONPATH=$WORKSPACE
+              export FLASK_APP=app/api.py
+
+              python -m flask run --host=127.0.0.1 --port=5000 &
+              sleep 5
+
+              python -m pytest --junitxml=result-rest.xml test/rest || true
+              pkill -f "flask run" || true
+            '''
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'result-rest.xml'
+            }
+          }
+        }
+      }
+    }
+
+    stage('Quality') {
+      agent { label 'agent-quality' }
+      steps {
+        unstash 'source'
+        sh '''
+          python3.11 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+          set +e
+          flake8 app test | tee flake8.out
+          bandit -r app -f txt | tee bandit.out
+          exit 0
+        '''
+        script {
+          def flakeCount = sh(
+            script: "wc -l < flake8.out | tr -d ' '",
+            returnStdout: true
+          ).trim() as Integer
+
+          def banditCount = sh(
+            script: "grep -c '^>> Issue:' bandit.out || true",
+            returnStdout: true
+          ).trim() as Integer
+
+          if (flakeCount >= 8 || banditCount >= 2) {
+            currentBuild.result = 'UNSTABLE'
+          }
+        }
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'flake8.out,bandit.out', allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Performance') {
+      agent { label 'principal' }
+      steps {
+        unstash 'source'
+        sh '''
+          python3.11 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          export FLASK_APP=app/api.py
+
+          python -m flask run --host=127.0.0.1 --port=5000 &
+          sleep 5
+
+          /opt/homebrew/bin/jmeter -n -t jmeter/testplan.jmx -l jmeter/results.jtl
+          pkill -f "flask run" || true
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'jmeter/results.jtl', allowEmptyArchive: true
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      echo "Pipeline distribuido finalizado. Resultado: ${currentBuild.currentResult}"
+    }
+  }
+}
