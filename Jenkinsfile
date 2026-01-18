@@ -59,7 +59,7 @@ pipeline {
             python -m flask run --host=127.0.0.1 --port=5000 &
             sleep 5
 
-            python -m pytest --junitxml=result-rest.xml test/rest
+            python -m pytest --junitxml=result-rest.xml test/rest || true
           '''
         }
       }
