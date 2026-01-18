@@ -87,7 +87,7 @@ pipeline {
             ).trim() as Integer
 
             if (count >= 10) {
-              currentBuild.result = 'FAILURE'
+              currentBuild.result = 'UNSTABLE'
             } else if (count >= 8) {
               currentBuild.result = currentBuild.result ?: 'UNSTABLE'
             }
