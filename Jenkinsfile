@@ -38,7 +38,7 @@ pipeline {
         sh '''
           source $VENV/bin/activate
           export PYTHONPATH="$WORKSPACE"
-          python -m coverage run -m pytest --junitxml=result-unit.xml test/unit
+          python -m coverage run --source=app -m pytest --junitxml=result-unit.xml test/unit
         '''
       }
       post {
@@ -57,7 +57,7 @@ pipeline {
             export FLASK_APP=app/api.py
 
             python -m flask run --host=127.0.0.1 --port=5000 &
-            sleep 3
+            sleep 5
 
             python -m pytest --junitxml=result-rest.xml test/rest
           '''
@@ -77,7 +77,7 @@ pipeline {
           sh '''
             source $VENV/bin/activate
             set +e
-            flake8 . | tee flake8.out
+            flake8 app test | tee flake8.out
             exit 0
           '''
           script {
@@ -166,9 +166,10 @@ pipeline {
           sh '''
             source $VENV/bin/activate
             python -m flask run --host=127.0.0.1 --port=5000 &
-            sleep 3
+            sleep 5
 
-            jmeter -n -t jmeter/testplan.jmx -l jmeter/results.jtl
+            /opt/homebrew/bin/jmeter -n -t jmeter/testplan.jmx -l jmeter/results.jtl
+
             pkill -f "flask run" || true
           '''
         }
